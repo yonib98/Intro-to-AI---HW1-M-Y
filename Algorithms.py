@@ -8,10 +8,42 @@ from IPython.display import clear_output
 from typing import List, Tuple
 import heapdict
 
+class Node:
+    def __init__(self, state: int, parent , cost: float, action: int, heuristic: float = None) -> None:
+        self.state = state
+        self.parent = parent
+        self.cost = cost
+        self.action = action
+        self.heuristic = heuristic
+
+    def __eq__(self, other) -> bool:
+        return other.state == self.state
+    
+    def __str__(self) -> str:
+        return f"State: {self.state}, Parent: {self.parent}, Action: {self.action}, Cost: {self.cost}, Heuristic: {self.heuristic}"
+    
 class Agent(ABC):
     def __init__(self) -> None:
         self.env = None
 
+    # Helper functions that get the total cost and the actions of the node based on the path to that node.
+    def _get_path_total_cost(self, node: Node) -> float:
+        total_cost = 0
+        while node is not None:
+            total_cost += node.cost
+            node = node.parent
+        return total_cost
+
+    def _get_path_actions(self, node: Node) -> List[int]:
+        actions = []
+        if Node is None:
+            return []
+        
+        while node.parent is not None: 
+            actions.append(node.action)
+            node = node.parent
+        return actions[::-1]
+    
     def print_solution(self, actions) -> None:
         self.env.reset()
         total_cost = 0
@@ -43,43 +75,10 @@ class Agent(ABC):
     def search(self, env: DragonBallEnv) -> Tuple[List[int], float, int]:
         pass
 
-class Node:
-    def __init__(self, state: int, parent , cost: float, action: int, heuristic: float = None) -> None:
-        self.state = state
-        self.parent = parent
-        self.cost = cost
-        self.action = action
-        # self.heuristic = heuristic
-
-    # def __lt__(self, other) -> bool:
-    #     return self.cost + self.heuristic < other.cost + other.heuristic
-    #     return self.cost < other.cost
-
-    def __hash__(self) -> int:
-        return hash(self.state)
-
-    def __str__(self) -> str:
-        return f"State: {self.state}, Parent: {self.parent}, Action: {self.action}, Cost: {self.cost}, Heuristic: {self.heuristic}"
 class BFSAgent(Agent):
     def __init__(self) -> None:
         super().__init__()
-
-    def _get_path_total_cost(self, node: Node) -> float:
-        total_cost = 0
-        while node is not None:
-            total_cost += node.cost
-            node = node.parent
-        return total_cost
-
-    def _get_path_actions(self, node: Node) -> List[int]:
-        actions = []
-        if Node is None:
-            return []
-        
-        while node.parent is not None:
-            actions.append(node.action)
-            node = node.parent
-        return actions[::-1]   
+       
     def search(self, env: DragonBallEnv) -> Tuple[List[int], float, int]:
         self.env = env
         self.env.reset()
@@ -91,25 +90,20 @@ class BFSAgent(Agent):
         if (self.env.is_final_state(state)):
             return [], 0, 0
         open = [node]
-        closed = set()
+        closed = []
         expanded_nodes = 0
         while len(open) > 0:
             node = open.pop(0)
-            if node.state[0] == self.env.d1[0]:
-                node.state = node.state[0], True, node.state[2]
-                # print('found first  dragon ball')
-                # self.print_solution(self._get_path_actions(node))
-
-            if node.state[0] == self.env.d2[0]:
-                node.state = node.state[0], node.state[1], True
-                # print('found second dragon ball')
-                # self.print_solution(self._get_path_actions(node))
-            closed.add(node.state)
+            closed.append(node.state)
             expanded_nodes += 1
             for action, (next_state, cost, terminated) in env.succ(node.state).items():
-                next_state = next_state[0], node.state[1], node.state[2]
                 child = Node(next_state, node, cost, action)
-
+                # Set child dragon ball's to true in 2 cases:
+                # a. Parent found the dragon ball; b. Child location is the dragon ball location.
+                child.state = child.state[0], \
+                              node.state[1] or child.state[0] == self.env.d1[0], \
+                              node.state[2] or child.state[0] == self.env.d2[0]
+                
                 if terminated is True and self.env.is_final_state(child.state) is False:
                     # state is a hole
                     continue
@@ -118,7 +112,7 @@ class BFSAgent(Agent):
                         print('Found a solution !')
                         return self._get_path_actions(child), self._get_path_total_cost(child), expanded_nodes
                     open.append(child)
-        print('couldn\'t find a solution')
+        # print('couldn\'t find a solution')
                     
 
                 
