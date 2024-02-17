@@ -114,6 +114,8 @@ class BFSAgent(Agent):
             closed.add(node.state)
             expanded_nodes += 1
             for action, (next_state, cost, terminated) in env.succ(node.state).items():
+                if next_state is None:
+                    continue
                 child = Node(next_state, node, cost, action)
                 # Set child dragon ball's to true in 2 cases:
                 # a. Parent found the dragon ball; b. Child location is the dragon ball location.
@@ -123,6 +125,7 @@ class BFSAgent(Agent):
                 
                 if terminated is True and self.env.is_final_state(child.state) is False:
                     # state is a hole
+                    # TODO: This line makes us not expanding holes, affecting expanded_nodes counuter. We need to make sure this is what is expected.
                     continue
                 if child.state not in closed and child not in open:
                     if self.env.is_final_state(child.state):
@@ -146,10 +149,10 @@ class WeightedAStarAgent(Agent):
         while len(open) > 0:
             node, node_fval = open.popitem()
             closed[node.state] = node
-            expanded_nodes += 1
             if self.env.is_final_state(node.state):
                 return self._get_path_actions(node), node.cost, expanded_nodes
-        
+            
+            expanded_nodes += 1
             for action, (next_state, edge_cost, terminated) in env.succ(node.state).items():
                 cost = node.cost + edge_cost # Cost==gvalue
                 child = Node(next_state, node, cost, action)
@@ -162,6 +165,11 @@ class WeightedAStarAgent(Agent):
                 child.heuristic=self.hmsap(child.state)
                 fval = self.f(child, h_weight)
 
+                if terminated is True and self.env.is_final_state(child.state) is False and child.cost != np.inf:
+                    # (63,False, False) or something similar.
+                    # TODO: not sure if this type of terminal states should be expanded or not. make sure this is the expected behavior.
+                    continue
+ 
                 if child.state not in closed and child not in open:
                     open[child] = fval
                 elif child in open:
@@ -181,14 +189,14 @@ class AStarEpsilonAgent(Agent):
     def __init__(self) -> None:
         self.env = None
 
-    def focal_min(self, open, epsilon, heusritic_func):
+    def focal_min(self, open, epsilon, h_focal):
         _, min_fval = open.peekitem()
         min_fval = min_fval[0] # Consier only the f-value, ignore state.
         focal_set = []
         for node, node_fval in open.items():
             node_fval = node_fval[0]
             if node_fval <= (1 + epsilon) * min_fval:
-                focal_set.append((node, heusritic_func(node.state)))
+                focal_set.append((node, h_focal(node)))
         
         return min(focal_set, key=lambda x: x[1])[0]
 
@@ -204,13 +212,13 @@ class AStarEpsilonAgent(Agent):
         
         expanded_nodes = 0
         while len(open) > 0:
-            node = self.focal_min(open, epsilon, heusritic_func=self.hmsap)
+            node = self.focal_min(open, epsilon, h_focal=lambda node: node.cost)
             open.pop(node)
             closed[node.state] = node
-            expanded_nodes += 1
             if self.env.is_final_state(node.state):
                 return self._get_path_actions(node), node.cost, expanded_nodes
-        
+            
+            expanded_nodes += 1
             for action, (next_state, edge_cost, terminated) in env.succ(node.state).items():
                 cost = node.cost + edge_cost # Cost==gvalue
                 child = Node(next_state, node, cost, action)
@@ -222,6 +230,10 @@ class AStarEpsilonAgent(Agent):
                          
                 child.heuristic=self.hmsap(child.state)
                 fval = self.f(child, h_weight=0.5)
+                if terminated is True and self.env.is_final_state(child.state) is False and child.cost != np.inf:
+                    # (63,False, False) or something similar.
+                    # TODO: not sure if this type of terminal states should be expanded or not. make sure this is the expected behavior.
+                    continue
 
                 if child.state not in closed and child not in open:
                     open[child] = fval
