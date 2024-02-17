@@ -13,6 +13,8 @@ UP = 2
 LEFT = 3
 
 MAPS = {
+    "2x2": ["SD", 
+            "DG"],
     "4x4": ["SFFF",
             "FDFF",
             "FFFD",
@@ -27,6 +29,27 @@ MAPS = {
         "DFTFHDTL",
         "FLFHFFFG",
     ],
+    "20x20": [
+        'SFFLHFHTALHLFATAHTHT',
+        'HFTTLLAHFTAFAAHHTLFH',
+        'HHTFFFHAFFFFAFFTHHHT',
+        'TTAFHTFHTHHLAHHAALLF',
+        'HLALHFFTHAHHAFFLFHTF',
+        'AFTAFTFLFTTTFTLLTHDF',
+        'LFHFFAAHFLHAHHFHFALA',
+        'AFTFFLTFLFTAFFLTFAHH',
+        'HTTLFTHLTFAFFLAFHFTF',
+        'LLALFHFAHFAALHFTFHTF',
+        'LFFFAAFLFFFFHFLFFAFH',
+        'THHTTFAFLATFATFTHLLL',
+        'HHHAFFFATLLALFAHTHLL',
+        'HLFFFFHFFLAAFTFFDAFH',
+        'HTLFTHFFLTHLHHLHFTFH',
+        'AFTTLHLFFLHTFFAHLAFT',
+        'HAATLHFFFHHHHAFFFHLH',
+        'FHFLLLFHLFFLFTFFHAFL',
+        'LHTFLTLTFATFAFAFHAAF',
+        'FTFFFFFLFTHFTFLTLHFG']
 }
 
 env = DragonBallEnv(MAPS["8x8"])
@@ -70,7 +93,27 @@ def test_bfs():
     assert total_cost == 119.0, "Error in total cost returned"
     return actions, env
 
+def test_astar():
+    WA_agent = WeightedAStarAgent()
+    actions, total_cost, expanded = WA_agent.search(env, h_weight=0.5)
+    print(f"Total_cost: {total_cost}")
+    print(f"Expanded: {expanded}")
+    print(f"Actions: {actions}")
+
+    return actions, env
+
+def test_astar_epsilon(epsilon=100):
+    print("epsilon: ", epsilon)
+    AStarEpsilon_agent = AStarEpsilonAgent()
+    actions, total_cost, expanded = AStarEpsilon_agent.search(env, epsilon=epsilon)
+    print(f"Total_cost: {total_cost}")
+    print(f"Expanded: {expanded}")
+    print(f"Actions: {actions}")
+    return actions, env
+
 if __name__ == "__main__":
-    actions, env = test_bfs()
-    print_solution(actions, env)
+    # actions, env = test_bfs()
+    actions, env = test_astar()
+    actions, env = test_astar_epsilon(epsilon=100)
+   # print_solution(actions, env)
     

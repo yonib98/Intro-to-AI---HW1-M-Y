@@ -30,6 +30,7 @@ class Agent(ABC):
 
     # Helper functions that get the total cost and the actions of the node based on the path to that node.
     def _get_path_total_cost(self, node: Node) -> float:
+        # Only for BFS
         total_cost = 0
         while node is not None:
             total_cost += node.cost
@@ -45,6 +46,20 @@ class Agent(ABC):
             actions.append(node.action)
             node = node.parent
         return actions[::-1]
+    
+    def manhattan_distance(self, first_state, second_state):
+        first_row, first_col = self.env.to_row_col(first_state)
+        second_row, second_col = self.env.to_row_col(second_state)
+        return abs(first_row - second_row) + abs(first_col - second_col)
+
+    def hmsap(self, state) -> int:
+        distant_from_d1 = self.manhattan_distance(state, self.env.d1)
+        distant_from_d2 = self.manhattan_distance(state, self.env.d2)
+        distant_from_goals = [self.manhattan_distance(state, goal) for goal in self.env.get_goal_states()]
+        return min(distant_from_goals + [distant_from_d1, distant_from_d2])
+    
+    def f(self, node: Node, h_weight) -> float:
+        return ((1 - h_weight) * node.cost + h_weight * node.heuristic, node.state)
     
     def print_solution(self, actions) -> None:
         self.env.reset()
@@ -114,29 +129,9 @@ class BFSAgent(Agent):
                         return self._get_path_actions(child), self._get_path_total_cost(child), expanded_nodes
                     open.append(child)
                     
-
-                
-
-        
-
-
 class WeightedAStarAgent(Agent):
     def __init__(self) -> None:
         super().__init__()
-
-    def manhattan_distance(self, first_state, second_state):
-        first_row, first_col = self.env.to_row_col(first_state)
-        second_row, second_col = self.env.to_row_col(second_state)
-        return abs(first_row - second_row) + abs(first_col - second_col)
-
-    def hmsap(self, state) -> int:
-        distant_from_d1 = self.manhattan_distance(state, self.env.d1)
-        distant_from_d2 = self.manhattan_distance(state, self.env.d2)
-        distant_from_goals = [self.manhattan_distance(state, goal) for goal in self.env.get_goal_states()]
-        return min(distant_from_goals + [distant_from_d1, distant_from_d2])
-    
-    def f(self, node: Node, h_weight) -> float:
-        return ((1-h_weight) * node.cost + h_weight * node.heuristic, node.state[0])
     
     def search(self, env: DragonBallEnv, h_weight) -> Tuple[List[int], float, int]:
         self.env = env
@@ -149,7 +144,7 @@ class WeightedAStarAgent(Agent):
         
         expanded_nodes = 0
         while len(open) > 0:
-            node, _ = open.popitem()
+            node, node_fval = open.popitem()
             closed[node.state] = node
             expanded_nodes += 1
             if self.env.is_final_state(node.state):
@@ -162,11 +157,7 @@ class WeightedAStarAgent(Agent):
                 # a. Parent found the dragon ball; b. Child location is the dragon ball location.
                 child.state = child.state[0], \
                               node.state[1] or child.state[0] == self.env.d1[0], \
-                              node.state[2] or child.state[0] == self.env.d2[0]
-
-                if terminated is True and self.env.is_final_state(child.state) is False:
-                    if child.cost == np.inf:
-                        continue    
+                              node.state[2] or child.state[0] == self.env.d2[0]  
                         
                 child.heuristic=self.hmsap(child.state)
                 fval = self.f(child, h_weight)
@@ -185,11 +176,64 @@ class WeightedAStarAgent(Agent):
                     if fval < old_fval:
                         open[child] = fval
                         closed.pop(child.state)
-        print('didnt find solution')
 
-class AStarEpsilonAgent():
+class AStarEpsilonAgent(Agent):
     def __init__(self) -> None:
-        raise NotImplementedError
+        self.env = None
+
+    def focal_min(self, open, epsilon, heusritic_func):
+        _, min_fval = open.peekitem()
+        min_fval = min_fval[0] # Consier only the f-value, ignore state.
+        focal_set = []
+        for node, node_fval in open.items():
+            node_fval = node_fval[0]
+            if node_fval <= (1 + epsilon) * min_fval:
+                focal_set.append((node, heusritic_func(node.state)))
         
-    def ssearch(self, env: DragonBallEnv, epsilon: int) -> Tuple[List[int], float, int]:
-        raise NotImplementedError
+        return min(focal_set, key=lambda x: x[1])[0]
+
+
+    def search(self, env: DragonBallEnv, epsilon: int) -> Tuple[List[int], float, int]:
+        self.env = env
+        self.env.reset()
+        state = self.env.get_initial_state()
+        node = Node(state,  parent=None, cost=0, action=None, heuristic=self.hmsap(state)) # Make a node.
+
+        open = heapdict.heapdict({node: self.f(node, h_weight=0.5)})
+        closed = {} # key: state, value: node
+        
+        expanded_nodes = 0
+        while len(open) > 0:
+            node = self.focal_min(open, epsilon, heusritic_func=self.hmsap)
+            open.pop(node)
+            closed[node.state] = node
+            expanded_nodes += 1
+            if self.env.is_final_state(node.state):
+                return self._get_path_actions(node), node.cost, expanded_nodes
+        
+            for action, (next_state, edge_cost, terminated) in env.succ(node.state).items():
+                cost = node.cost + edge_cost # Cost==gvalue
+                child = Node(next_state, node, cost, action)
+                # Set child dragon ball's to true in 2 cases:
+                # a. Parent found the dragon ball; b. Child location is the dragon ball location.
+                child.state = child.state[0], \
+                              node.state[1] or child.state[0] == self.env.d1[0], \
+                              node.state[2] or child.state[0] == self.env.d2[0]
+                         
+                child.heuristic=self.hmsap(child.state)
+                fval = self.f(child, h_weight=0.5)
+
+                if child.state not in closed and child not in open:
+                    open[child] = fval
+                elif child in open:
+                    old_fval = open[child]
+                    if fval < old_fval:
+                        open.pop(child) # Drop the old node.
+                        open[child] = fval  # Append the new node with the new fval.
+                else: 
+                    # Child in close
+                    old_child = closed[child.state]
+                    fval, old_fval = self.f(child, h_weight=0.5), self.f(old_child, h_weight=0.5)
+                    if fval < old_fval:
+                        open[child] = fval
+                        closed.pop(child.state)
