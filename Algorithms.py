@@ -53,8 +53,10 @@ class Agent(ABC):
         return abs(first_row - second_row) + abs(first_col - second_col)
 
     def hmsap(self, state) -> int:
-        distant_from_d1 = self.manhattan_distance(state, self.env.d1)
-        distant_from_d2 = self.manhattan_distance(state, self.env.d2)
+        collected_d1, collected_d2 = state[1], state[2]
+        distant_from_d1 = self.manhattan_distance(state, self.env.d1) if not collected_d1 else np.inf
+        distant_from_d2 = self.manhattan_distance(state, self.env.d2) if not collected_d2 else np.inf
+        
         distant_from_goals = [self.manhattan_distance(state, goal) for goal in self.env.get_goal_states()]
         return min(distant_from_goals + [distant_from_d1, distant_from_d2])
     
