@@ -4,17 +4,17 @@ from abc import ABC, abstractmethod
 import time
 
 from DragonBallEnv import DragonBallEnv
-from IPython.display import clear_output
 from typing import List, Tuple
 import heapdict
 
 class Node:
-    def __init__(self, state: int, parent ,cost: float, action: int, heuristic: float = None) -> None:
+    def __init__(self, state: int, parent ,cost: float, action: int, heuristic: float = None, terminated: bool = False) -> None:
         self.state = state
         self.parent = parent
         self.cost = cost
         self.action = action
         self.heuristic = heuristic
+        self.terminated = terminated
         
     def __eq__(self, other) -> bool:
         return other.state == self.state
@@ -52,8 +52,11 @@ class Agent(ABC):
         second_row, second_col = self.env.to_row_col(second_state)
         return abs(first_row - second_row) + abs(first_col - second_col)
 
-    def hmsap(self, state) -> int:
-        collected_d1, collected_d2 = state[1], state[2]
+    def hmsap(self, state, old_state=None) -> int:
+        if old_state is not None:
+            collected_d1, collected_d2 = old_state[1], old_state[2]
+        else:
+            collected_d1, collected_d2 = False, False   
         distant_from_d1 = self.manhattan_distance(state, self.env.d1) if not collected_d1 else np.inf
         distant_from_d2 = self.manhattan_distance(state, self.env.d2) if not collected_d2 else np.inf
         
@@ -63,33 +66,6 @@ class Agent(ABC):
     def f(self, node: Node, h_weight) -> float:
         return ((1 - h_weight) * node.cost + h_weight * node.heuristic, node.state)
     
-    def print_solution(self, actions) -> None:
-        self.env.reset()
-        total_cost = 0
-        print(self.env.render())
-        print(f"Timestep: {1}")
-        print(f"State: {self.env.get_state()}")
-        print(f"Action: {None}")
-        print(f"Cost: {0}")
-        time.sleep(1)
-
-        for i, action in enumerate(actions):
-            state, cost, terminated = self.env.step(action)
-            total_cost += cost
-            clear_output(wait=True)
-
-            print(self.env.render())
-            print(f"Timestep: {i + 2}")
-            print(f"State: {state}")
-            print(f"Action: {action}")
-            print(f"Cost: {cost}")
-            print(f"Total cost: {total_cost}")
-            
-            time.sleep(1) 
-
-            if terminated is True:
-                break
-      
     @abstractmethod
     def search(self, env: DragonBallEnv) -> Tuple[List[int], float, int]:
         pass
@@ -116,19 +92,17 @@ class BFSAgent(Agent):
             closed.add(node.state)
             expanded_nodes += 1
             for action, (next_state, cost, terminated) in env.succ(node.state).items():
-                if next_state is None:
-                    continue
-                child = Node(next_state, node, cost, action)
+                if node.terminated is True:
+                    # Can't continue moving (a hole or "G")
+                    break
+
+                child = Node(next_state, node, cost, action, terminated=terminated)
                 # Set child dragon ball's to true in 2 cases:
                 # a. Parent found the dragon ball; b. Child location is the dragon ball location.
                 child.state = child.state[0], \
                               node.state[1] or child.state[0] == self.env.d1[0], \
                               node.state[2] or child.state[0] == self.env.d2[0]
-                
-                if terminated is True and self.env.is_final_state(child.state) is False:
-                    # state is a hole
-                    # TODO: This line makes us not expanding holes, affecting expanded_nodes counuter. We need to make sure this is what is expected.
-                    continue
+
                 if child.state not in closed and child not in open:
                     if self.env.is_final_state(child.state):
                         return self._get_path_actions(child), self._get_path_total_cost(child), expanded_nodes
@@ -156,21 +130,20 @@ class WeightedAStarAgent(Agent):
             
             expanded_nodes += 1
             for action, (next_state, edge_cost, terminated) in env.succ(node.state).items():
+                if node.terminated is True:
+                    # Can't continue moving (a hole or "G")
+                    break
                 cost = node.cost + edge_cost # Cost==gvalue
-                child = Node(next_state, node, cost, action)
+                child = Node(next_state, node, cost, action, terminated=terminated)
                 # Set child dragon ball's to true in 2 cases:
                 # a. Parent found the dragon ball; b. Child location is the dragon ball location.
                 child.state = child.state[0], \
                               node.state[1] or child.state[0] == self.env.d1[0], \
                               node.state[2] or child.state[0] == self.env.d2[0]  
                         
-                child.heuristic=self.hmsap(child.state)
+                child.heuristic=self.hmsap(child.state, old_state=node.state)
                 fval = self.f(child, h_weight)
 
-                if terminated is True and self.env.is_final_state(child.state) is False and child.cost != np.inf:
-                    # (63,False, False) or something similar.
-                    # TODO: not sure if this type of terminal states should be expanded or not. make sure this is the expected behavior.
-                    continue
  
                 if child.state not in closed and child not in open:
                     open[child] = fval
@@ -222,20 +195,19 @@ class AStarEpsilonAgent(Agent):
             
             expanded_nodes += 1
             for action, (next_state, edge_cost, terminated) in env.succ(node.state).items():
+                if node.terminated is True:
+                    # Can't continue moving (a hole or "G")
+                    break
                 cost = node.cost + edge_cost # Cost==gvalue
-                child = Node(next_state, node, cost, action)
+                child = Node(next_state, node, cost, action, terminated=terminated)
                 # Set child dragon ball's to true in 2 cases:
                 # a. Parent found the dragon ball; b. Child location is the dragon ball location.
                 child.state = child.state[0], \
                               node.state[1] or child.state[0] == self.env.d1[0], \
                               node.state[2] or child.state[0] == self.env.d2[0]
                          
-                child.heuristic=self.hmsap(child.state)
+                child.heuristic=self.hmsap(child.state, old_state=node.state)
                 fval = self.f(child, h_weight=0.5)
-                if terminated is True and self.env.is_final_state(child.state) is False and child.cost != np.inf:
-                    # (63,False, False) or something similar.
-                    # TODO: not sure if this type of terminal states should be expanded or not. make sure this is the expected behavior.
-                    continue
 
                 if child.state not in closed and child not in open:
                     open[child] = fval
