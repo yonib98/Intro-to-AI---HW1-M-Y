@@ -52,11 +52,8 @@ class Agent(ABC):
         second_row, second_col = self.env.to_row_col(second_state)
         return abs(first_row - second_row) + abs(first_col - second_col)
 
-    def hmsap(self, state, old_state=None) -> int:
-        if old_state is not None:
-            collected_d1, collected_d2 = old_state[1], old_state[2]
-        else:
-            collected_d1, collected_d2 = False, False   
+    def hmsap(self, state) -> int:
+        collected_d1, collected_d2 = state[1], state[2]
         distant_from_d1 = self.manhattan_distance(state, self.env.d1) if not collected_d1 else np.inf
         distant_from_d2 = self.manhattan_distance(state, self.env.d2) if not collected_d2 else np.inf
         
@@ -107,6 +104,7 @@ class BFSAgent(Agent):
                     if self.env.is_final_state(child.state):
                         return self._get_path_actions(child), self._get_path_total_cost(child), expanded_nodes
                     open.append(child)
+        return [], 0, 0
                     
 class WeightedAStarAgent(Agent):
     def __init__(self) -> None:
@@ -141,7 +139,7 @@ class WeightedAStarAgent(Agent):
                               node.state[1] or child.state[0] == self.env.d1[0], \
                               node.state[2] or child.state[0] == self.env.d2[0]  
                         
-                child.heuristic=self.hmsap(child.state, old_state=node.state)
+                child.heuristic=self.hmsap(child.state)
                 fval = self.f(child, h_weight)
 
  
@@ -159,22 +157,23 @@ class WeightedAStarAgent(Agent):
                     if fval < old_fval:
                         open[child] = fval
                         closed.pop(child.state)
+        return [], 0, 0
 
 class AStarEpsilonAgent(Agent):
     def __init__(self) -> None:
         self.env = None
 
-    def focal_min(self, open, epsilon, h_focal):
+    def focal_min(self, open, epsilon):
+        focal_set = heapdict.heapdict()
         _, min_fval = open.peekitem()
         min_fval = min_fval[0] # Consier only the f-value, ignore state.
-        focal_set = []
         for node, node_fval in open.items():
             node_fval = node_fval[0]
             if node_fval <= (1 + epsilon) * min_fval:
-                focal_set.append((node, h_focal(node)))
-        
-        return min(focal_set, key=lambda x: x[1])[0]
-
+                node_priority = (node.cost, node.state[0]) # Sort Focal set by g-value and then by position.
+                focal_set[node] = node_priority
+        return focal_set.peekitem()[0]
+    
 
     def search(self, env: DragonBallEnv, epsilon: int) -> Tuple[List[int], float, int]:
         self.env = env
@@ -187,7 +186,7 @@ class AStarEpsilonAgent(Agent):
         
         expanded_nodes = 0
         while len(open) > 0:
-            node = self.focal_min(open, epsilon, h_focal=lambda node: node.cost)
+            node = self.focal_min(open, epsilon)
             open.pop(node)
             closed[node.state] = node
             if self.env.is_final_state(node.state):
@@ -206,7 +205,7 @@ class AStarEpsilonAgent(Agent):
                               node.state[1] or child.state[0] == self.env.d1[0], \
                               node.state[2] or child.state[0] == self.env.d2[0]
                          
-                child.heuristic=self.hmsap(child.state, old_state=node.state)
+                child.heuristic=self.hmsap(child.state)
                 fval = self.f(child, h_weight=0.5)
 
                 if child.state not in closed and child not in open:
@@ -223,3 +222,4 @@ class AStarEpsilonAgent(Agent):
                     if fval < old_fval:
                         open[child] = fval
                         closed.pop(child.state)
+        return [], 0, 0
