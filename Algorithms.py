@@ -61,7 +61,7 @@ class Agent(ABC):
         return min(distant_from_goals + [distant_from_d1, distant_from_d2])
     
     def f(self, node: Node, h_weight) -> float:
-        return ((1 - h_weight) * node.cost + h_weight * node.heuristic, node.state)
+        return (((1 - h_weight) * node.cost + (h_weight * node.heuristic)), node.state[0])
     
     @abstractmethod
     def search(self, env: DragonBallEnv) -> Tuple[List[int], float, int]:
@@ -125,7 +125,6 @@ class WeightedAStarAgent(Agent):
             closed[node.state] = node
             if self.env.is_final_state(node.state):
                 return self._get_path_actions(node), node.cost, expanded_nodes
-            
             expanded_nodes += 1
             for action, (next_state, edge_cost, terminated) in env.succ(node.state).items():
                 if node.terminated is True:
